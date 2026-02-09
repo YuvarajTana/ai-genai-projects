@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG System Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 50px;
+        }
+
+        .section-title {
+            font-size: 2em;
+            color: #667eea;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin: 30px 0;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+
+        .flow-box {
+            background: white;
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 200px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .flow-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .flow-box.active {
+            background: #667eea;
+            color: white;
+            border-color: #764ba2;
+        }
+
+        .flow-arrow {
+            font-size: 2em;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .code-block .keyword { color: #c678dd; }
+        .code-block .function { color: #61afef; }
+        .code-block .string { color: #98c379; }
+        .code-block .comment { color: #5c6370; }
+        .code-block .number { color: #d19a66; }
+
+        .component-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+
+        .component-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .component-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .component-card p {
+            line-height: 1.8;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .config-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .config-item strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 15px 30px;
+            background: #f8f9fa;
+            border: none;
+            border-radius: 10px 10px 0 0;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .interactive-demo {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .demo-btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .demo-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .demo-output {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            min-height: 100px;
+            border: 2px solid #e0e0e0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+            .flow-diagram {
+                flex-direction: column;
+            }
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 RAG System Architecture</h1>
+            <p>Retrieval-Augmented Generation System Visualization</p>
+        </header>
+
+        <div class="content">
+            <!-- Overview Section -->
+            <div class="section">
+                <h2 class="section-title">System Overview</h2>
+                <p style="font-size: 1.1em; line-height: 1.8; margin-bottom: 30px;">
+                    This RAG (Retrieval-Augmented Generation) system combines document retrieval with LLM generation.
+                    It processes documents, creates embeddings, stores them in a vector database, and uses them to answer questions.
+                </p>
+
+                <div class="config-grid">
+                    <div class="config-item">
+                        <strong>Data Directory</strong>
+                        <code>./data</code>
+                    </div>
+                    <div class="config-item">
+                        <strong>Vector DB</strong>
+                        <code>ChromaDB (./chroma_db)</code>
+                    </div>
+                    <div class="config-item">
+                        <strong>Embedding Model</strong>
+                        <code>all-MiniLM-L6-v2</code>
+                    </div>
+                    <div class="config-item">
+                        <strong>LLM</strong>
+                        <code>Ollama (gpt-oss:20b)</code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Architecture Flow -->
+            <div class="section">
+                <h2 class="section-title">System Architecture</h2>
+                <div class="tabs">
+                    <button class="tab active" onclick="showTab('indexing')">Indexing Flow</button>
+                    <button class="tab" onclick="showTab('querying')">Query Flow</button>
+                </div>
+
+                <!-- Indexing Flow -->
+                <div id="indexing" class="tab-content active">
+                    <div class="flow-diagram" id="indexing-flow">
+                        <div class="flow-box" data-step="1">
+                            <h3>📄 Documents</h3>
+                            <p>Load from ./data</p>
+                            <small>TXT, PDF, DOCX, MD</small>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="2">
+                            <h3>✂️ Chunking</h3>
+                            <p>Split into chunks</p>
+                            <small>900 chars, 120 overlap</small>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="3">
+                            <h3>🧮 Embedding</h3>
+                            <p>Create vectors</p>
+                            <small>SentenceTransformer</small>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="4">
+                            <h3>💾 Storage</h3>
+                            <p>Save to ChromaDB</p>
+                            <small>With metadata</small>
+                        </div>
+                    </div>
+
+                    <div class="component-card">
+                        <h3>1. Document Loaders</h3>
+                        <p>The system supports multiple file formats:</p>
+                        <div class="code-block">
+<span class="function">def</span> <span class="keyword">load_file</span>(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    <span class="keyword">if</span> ext == <span class="string">".txt"</span> <span class="keyword">or</span> ext == <span class="string">".md"</span>:
+        <span class="keyword">return</span> load_txt(path)
+    <span class="keyword">if</span> ext == <span class="string">".pdf"</span>:
+        <span class="keyword">return</span> load_pdf(path)
+    <span class="keyword">if</span> ext == <span class="string">".docx"</span>:
+        <span class="keyword">return</span> load_docx(path)
+                        </div>
+                    </div>
+
+                    <div class="component-card">
+                        <h3>2. Text Chunking</h3>
+                        <p>Documents are split into overlapping chunks to preserve context:</p>
+                        <div class="code-block">
+<span class="function">def</span> <span class="keyword">chunk_text</span>(text: str, chunk_size: int = <span class="number">900</span>, overlap: int = <span class="number">120</span>):
+    <span class="comment"># Simple char-based chunking with overlap</span>
+    chunks = []
+    start = <span class="number">0</span>
+    <span class="keyword">while</span> start < len(text):
+        end = min(len(text), start + chunk_size)
+        chunks.append(text[start:end])
+        start = end - overlap  <span class="comment"># Overlap for context</span>
+                        </div>
+                        <p><span class="highlight">Why overlap?</span> Ensures important information at chunk boundaries isn't lost.</p>
+                    </div>
+
+                    <div class="component-card">
+                        <h3>3. Embedding Generation</h3>
+                        <p>Each chunk is converted to a vector using SentenceTransformer:</p>
+                        <div class="code-block">
+embedder = SentenceTransformer(<span class="string">"all-MiniLM-L6-v2"</span>)
+embeddings = embedder.encode(documents, normalize_embeddings=<span class="keyword">True</span>)
+                        </div>
+                        <p>These vectors capture semantic meaning, allowing similarity search.</p>
+                    </div>
+
+                    <div class="component-card">
+                        <h3>4. Vector Storage</h3>
+                        <p>Chunks are stored in ChromaDB with metadata:</p>
+                        <div class="code-block">
+col.add(
+    ids=[<span class="string">"file.txt::chunk_0"</span>, ...],
+    documents=[chunk_texts, ...],
+    metadatas=[{<span class="string">"source"</span>: <span class="string">"file.txt"</span>, <span class="string">"chunk"</span>: <span class="number">0</span>}, ...],
+    embeddings=[vectors, ...]
+)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Query Flow -->
+                <div id="querying" class="tab-content">
+                    <div class="flow-diagram" id="querying-flow">
+                        <div class="flow-box" data-step="1">
+                            <h3>❓ User Query</h3>
+                            <p>Question input</p>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="2">
+                            <h3>🧮 Query Embedding</h3>
+                            <p>Convert to vector</p>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="3">
+                            <h3>🔍 Similarity Search</h3>
+                            <p>Find top-k chunks</p>
+                            <small>k=4 by default</small>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="4">
+                            <h3>📝 Prompt Building</h3>
+                            <p>Combine context</p>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="5">
+                            <h3>🤖 LLM Generation</h3>
+                            <p>Ollama API</p>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box" data-step="6">
+                            <h3>💬 Answer</h3>
+                            <p>Response + sources</p>
+                        </div>
+                    </div>
+
+                    <div class="two-column">
+                        <div class="component-card">
+                            <h3>Retrieval Process</h3>
+                            <div class="code-block">
+<span class="function">def</span> <span class="keyword">retrieve</span>(query: str, k: int = <span class="number">4</span>):
+    <span class="comment"># 1. Embed the query</span>
+    q_emb = embedder.encode([query])
+    
+    <span class="comment"># 2. Search in vector DB</span>
+    res = col.query(
+        query_embeddings=[q_emb],
+        n_results=k
+    )
+    
+    <span class="comment"># 3. Return top-k chunks</span>
+    <span class="keyword">return</span> hits
+                            </div>
+                        </div>
+
+                        <div class="component-card">
+                            <h3>Generation Process</h3>
+                            <div class="code-block">
+<span class="function">def</span> <span class="keyword">build_prompt</span>(question, contexts):
+    context_block = <span class="string">"\n\n"</span>.join(contexts)
+    <span class="keyword">return</span> <span class="string">f"""You are a helpful assistant.
+Answer using ONLY the context below.
+
+Context:
+{context_block}
+
+Question: {question}
+Answer:"""</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Functions -->
+            <div class="section">
+                <h2 class="section-title">Key Functions Explained</h2>
+                
+                <div class="component-card">
+                    <h3>index_documents()</h3>
+                    <p>Main indexing function that orchestrates the entire indexing pipeline:</p>
+                    <ul style="margin-left: 20px; line-height: 2;">
+                        <li>Scans <code>./data</code> directory for supported files</li>
+                        <li>Loads each file using appropriate loader</li>
+                        <li>Chunks the text with overlap</li>
+                        <li>Generates embeddings for all chunks</li>
+                        <li>Stores everything in ChromaDB with metadata</li>
+                    </ul>
+                </div>
+
+                <div class="component-card">
+                    <h3>retrieve(query, k=4)</h3>
+                    <p>Retrieves the most relevant document chunks for a query:</p>
+                    <ul style="margin-left: 20px; line-height: 2;">
+                        <li>Embeds the query using the same model</li>
+                        <li>Performs cosine similarity search in ChromaDB</li>
+                        <li>Returns top-k chunks with metadata and distances</li>
+                    </ul>
+                </div>
+
+                <div class="component-card">
+                    <h3>chat()</h3>
+                    <p>Interactive CLI interface that combines retrieval and generation:</p>
+                    <div class="code-block">
+<span class="keyword">while</span> <span class="keyword">True</span>:
+    q = input(<span class="string">"You: "</span>)
+    hits = retrieve(q, k=<span class="number">4</span>)      <span class="comment"># Retrieve</span>
+    prompt = build_prompt(q, hits)          <span class="comment"># Build prompt</span>
+    ans = ollama_generate(prompt)           <span class="comment"># Generate</span>
+    print(ans)                              <span class="comment"># Display</span>
+                        </div>
+                </div>
+            </div>
+
+            <!-- Interactive Demo -->
+            <div class="section">
+                <h2 class="section-title">Interactive Flow Visualization</h2>
+                <div class="interactive-demo">
+                    <div class="demo-controls">
+                        <button class="demo-btn" onclick="animateIndexing()">Animate Indexing Flow</button>
+                        <button class="demo-btn" onclick="animateQuerying()">Animate Query Flow</button>
+                        <button class="demo-btn" onclick="resetAnimation()">Reset</button>
+                    </div>
+                    <div class="demo-output" id="demo-output">
+                        Click a button above to see the flow animation...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Flow Example -->
+            <div class="section">
+                <h2 class="section-title">Example Data Flow</h2>
+                <div class="component-card">
+                    <h3>Indexing Example</h3>
+                    <div class="code-block">
+<span class="comment"># Input: document.txt (2000 characters)</span>
+Document: <span class="string">"This is a long document..."</span>
+
+<span class="comment"># After chunking (chunk_size=900, overlap=120):</span>
+Chunk 0: chars 0-900
+Chunk 1: chars 780-1680    <span class="comment"># Starts at 900-120=780</span>
+Chunk 2: chars 1560-2000   <span class="comment"># Starts at 1680-120=1560</span>
+
+<span class="comment"># Each chunk gets:</span>
+- ID: <span class="string">"document.txt::chunk_0"</span>
+- Metadata: {<span class="string">"source"</span>: <span class="string">"document.txt"</span>, <span class="string">"chunk"</span>: <span class="number">0</span>}
+- Embedding: [0.123, -0.456, ..., 0.789]  <span class="comment"># 384-dim vector</span>
+                    </div>
+                </div>
+
+                <div class="component-card">
+                    <h3>Query Example</h3>
+                    <div class="code-block">
+<span class="comment"># User asks: "What is machine learning?"</span>
+Query: <span class="string">"What is machine learning?"</span>
+
+<span class="comment"># 1. Query embedding:</span>
+Query Vector: [0.234, -0.567, ..., 0.123]
+
+<span class="comment"># 2. Similarity search finds top-4 chunks:</span>
+Results:
+  - document.txt::chunk_5 (distance: 0.12)  <span class="comment"># Most similar</span>
+  - guide.pdf::chunk_2 (distance: 0.23)
+  - notes.md::chunk_1 (distance: 0.31)
+  - doc.txt::chunk_8 (distance: 0.45)
+
+<span class="comment"># 3. Prompt sent to LLM:</span>
+<span class="string">"""You are a helpful assistant...
+Context:
+[Source: document.txt | chunk 5]
+Machine learning is a subset of AI...
+
+Question: What is machine learning?
+Answer:"""</span>
+
+<span class="comment"># 4. LLM generates answer using context</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="rag_visualization.js"></script>
+</body>
+</html>

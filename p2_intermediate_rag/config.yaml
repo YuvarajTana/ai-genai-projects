@@ -1,0 +1,138 @@
+# P2 Intermediate RAG Configuration
+# ===================================
+
+# Application Settings
+app:
+  name: "P2 Intermediate RAG"
+  version: "1.0.0"
+  debug: true
+
+# Data Directories
+paths:
+  data_dir: "./data"
+  db_dir: "./chroma_db"
+  cache_dir: "./cache"
+
+# Document Processing
+documents:
+  supported_extensions:
+    - ".txt"
+    - ".md"
+    - ".pdf"
+    - ".docx"
+    - ".html"
+
+# Chunking Configuration
+chunking:
+  strategy: "semantic"  # Options: semantic, recursive, character
+  chunk_size: 1000
+  chunk_overlap: 200
+  # Semantic chunking settings
+  semantic:
+    breakpoint_threshold: 0.3
+    min_chunk_size: 100
+  # Recursive chunking settings
+  recursive:
+    separators:
+      - "\n\n"
+      - "\n"
+      - ". "
+      - " "
+      - ""
+
+# Embedding Configuration
+embeddings:
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  # Alternative models:
+  # - sentence-transformers/all-mpnet-base-v2 (better quality, slower)
+  # - BAAI/bge-small-en-v1.5 (good balance)
+  # - BAAI/bge-large-en-v1.5 (best quality, slowest)
+  normalize: true
+  batch_size: 32
+
+# Vector Database
+vector_db:
+  collection_name: "docs"
+  distance_metric: "cosine"  # Options: cosine, l2, ip
+
+# Retrieval Configuration
+retrieval:
+  # Number of documents to retrieve
+  top_k: 6
+  
+  # Hybrid search settings
+  hybrid:
+    enabled: true
+    vector_weight: 0.7  # Weight for vector search
+    bm25_weight: 0.3    # Weight for BM25 search
+  
+  # Reranking settings
+  reranking:
+    enabled: true
+    model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    top_n: 4  # Final number of docs after reranking
+  
+  # Filtering
+  filtering:
+    enabled: true
+    # Default filters (can be overridden per query)
+    default_filters: {}
+
+# LLM Configuration
+llm:
+  provider: "ollama"  # Options: ollama, openai
+  
+  # Ollama settings
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3.2"
+    temperature: 0.1
+    max_tokens: 2048
+    timeout: 300
+  
+  # OpenAI settings (if using)
+  openai:
+    model: "gpt-4o-mini"
+    temperature: 0.1
+    max_tokens: 2048
+
+# Prompts
+prompts:
+  system_template: |
+    You are a helpful AI assistant. Answer questions based ONLY on the provided context.
+    If the answer cannot be found in the context, say "I don't have enough information to answer this question."
+    Always cite your sources by mentioning which document the information came from.
+  
+  qa_template: |
+    Context:
+    {context}
+    
+    Question: {question}
+    
+    Instructions:
+    1. Answer based ONLY on the context above
+    2. If unsure, say so
+    3. Cite the source documents
+    
+    Answer:
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "*"
+
+# Caching
+cache:
+  enabled: true
+  ttl: 3600  # Cache TTL in seconds
+  max_size: 1000  # Maximum cache entries
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/app.log"

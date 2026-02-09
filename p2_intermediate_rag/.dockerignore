@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Data and caches
+chroma_db/
+data/*.pdf
+data/*.docx
+*.sqlite3
+logs/
+cache/
+
+# Tests and dev
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Docs
+*.md
+!README.md
+
