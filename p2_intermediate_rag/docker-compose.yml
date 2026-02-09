@@ -1,0 +1,37 @@
+# P2 Intermediate RAG - Docker Compose
+# Run: docker-compose up
+# API: http://localhost:8000
+# Frontend: http://localhost:3000
+
+services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./data:/app/data
+      - ./chroma_db:/app/chroma_db
+      - ./config.yaml:/app/config.yaml
+    depends_on:
+      - ollama
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+
+volumes:
+  ollama_data:

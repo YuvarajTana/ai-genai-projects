@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2 Intermediate RAG</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #2a2a3a;
+            --success: #22c55e;
+            --error: #ef4444;
+        }
+        
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Header */
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+        
+        .logo h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .logo span {
+            color: var(--accent-light);
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+            font-size: 0.875rem;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--error);
+        }
+        
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+        
+        /* Main Content */
+        main {
+            flex: 1;
+            display: flex;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1.5rem;
+            gap: 1.5rem;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+        
+        .card-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .stat:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+        
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            color: var(--accent-light);
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--accent-light);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+        
+        .btn-full {
+            width: 100%;
+        }
+        
+        /* Chat Area */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .message {
+            display: flex;
+            gap: 1rem;
+            max-width: 85%;
+        }
+        
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1rem;
+        }
+        
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+        }
+        
+        .message.user .message-avatar {
+            background: var(--bg-tertiary);
+        }
+        
+        .message-content {
+            background: var(--bg-tertiary);
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            line-height: 1.6;
+        }
+        
+        .message.user .message-content {
+            background: var(--accent);
+        }
+        
+        .message-sources {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .source-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .source-tag .score {
+            color: var(--accent-light);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* Chat Input */
+        .chat-input-container {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+        
+        .chat-input-wrapper {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+        
+        .chat-input {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.875rem 1rem;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9375rem;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .chat-input:focus {
+            border-color: var(--accent);
+        }
+        
+        .chat-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .send-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 10px;
+            background: var(--accent);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .send-btn:hover {
+            background: var(--accent-light);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+        
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            gap: 0.25rem;
+            padding: 0.5rem 0;
+        }
+        
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+            30% {
+                transform: translateY(-4px);
+                opacity: 1;
+            }
+        }
+        
+        /* Welcome message */
+        .welcome {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-secondary);
+        }
+        
+        .welcome-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .welcome h2 {
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+            
+            .sidebar .card {
+                flex: 1;
+                min-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-icon">🔍</div>
+            <h1>P2 <span>RAG</span></h1>
+        </div>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </header>
+    
+    <main>
+        <aside class="sidebar">
+            <div class="card">
+                <div class="card-title">System Stats</div>
+                <div class="stat">
+                    <span class="stat-label">Chunks Indexed</span>
+                    <span class="stat-value" id="chunksCount">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Model</span>
+                    <span class="stat-value" id="modelName">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Ollama</span>
+                    <span class="stat-value" id="ollamaStatus">-</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">Actions</div>
+                <button class="btn btn-primary btn-full" onclick="indexDocuments()">
+                    📥 Index Documents
+                </button>
+                <button class="btn btn-secondary btn-full" style="margin-top: 0.75rem;" onclick="clearIndex()">
+                    🗑️ Clear Index
+                </button>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">Settings</div>
+                <div class="stat">
+                    <span class="stat-label">Results (k)</span>
+                    <input type="number" id="topK" value="4" min="1" max="10" 
+                           style="width: 60px; background: var(--bg-tertiary); border: 1px solid var(--border); 
+                                  border-radius: 6px; padding: 0.5rem; color: var(--text-primary); 
+                                  font-family: 'JetBrains Mono', monospace; text-align: center;">
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Reranking</span>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="useReranker" checked 
+                               style="width: 18px; height: 18px; accent-color: var(--accent);">
+                    </label>
+                </div>
+            </div>
+        </aside>
+        
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome">
+                    <div class="welcome-icon">🤖</div>
+                    <h2>Welcome to P2 RAG</h2>
+                    <p>Ask questions about your indexed documents.</p>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <div class="chat-input-wrapper">
+                    <textarea 
+                        class="chat-input" 
+                        id="queryInput" 
+                        placeholder="Ask a question about your documents..."
+                        rows="1"
+                        onkeydown="handleKeyDown(event)"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendQuery()">
+                        ➤
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        // Check health on load
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Connected';
+                document.getElementById('ollamaStatus').textContent = data.components.ollama ? '✓ Online' : '✗ Offline';
+                
+                // Get stats
+                const statsResponse = await fetch(`${API_BASE}/stats`);
+                const stats = await statsResponse.json();
+                document.getElementById('chunksCount').textContent = stats.chunks_indexed;
+                document.getElementById('modelName').textContent = stats.llm_model || '-';
+                
+            } catch (error) {
+                document.getElementById('statusText').textContent = 'Disconnected';
+                document.getElementById('ollamaStatus').textContent = '✗ Offline';
+            }
+        }
+        
+        // Index documents
+        async function indexDocuments() {
+            try {
+                addMessage('system', '📥 Indexing documents...');
+                const response = await fetch(`${API_BASE}/index`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addMessage('system', `✅ Indexed ${data.chunks_indexed} chunks successfully!`);
+                    document.getElementById('chunksCount').textContent = data.chunks_indexed;
+                } else {
+                    addMessage('system', `❌ Error: ${data.detail}`);
+                }
+            } catch (error) {
+                addMessage('system', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Clear index
+        async function clearIndex() {
+            if (!confirm('Are you sure you want to clear all indexed documents?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/index`, { method: 'DELETE' });
+                if (response.ok) {
+                    addMessage('system', '🗑️ Index cleared successfully!');
+                    document.getElementById('chunksCount').textContent = '0';
+                }
+            } catch (error) {
+                addMessage('system', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Send query
+        async function sendQuery() {
+            const input = document.getElementById('queryInput');
+            const query = input.value.trim();
+            
+            if (!query) return;
+            
+            // Add user message
+            addMessage('user', query);
+            input.value = '';
+            
+            // Show typing indicator
+            const typingId = showTyping();
+            
+            try {
+                const response = await fetch(`${API_BASE}/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: query,
+                        k: parseInt(document.getElementById('topK').value),
+                        use_reranker: document.getElementById('useReranker').checked
+                    })
+                });
+                
+                hideTyping(typingId);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addMessage('assistant', data.answer, data.sources);
+                } else {
+                    const error = await response.json();
+                    addMessage('assistant', `❌ Error: ${error.detail}`);
+                }
+            } catch (error) {
+                hideTyping(typingId);
+                addMessage('assistant', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Add message to chat
+        function addMessage(role, content, sources = null) {
+            const container = document.getElementById('chatMessages');
+            
+            // Remove welcome message if exists
+            const welcome = container.querySelector('.welcome');
+            if (welcome) welcome.remove();
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            let avatar = role === 'user' ? '👤' : role === 'assistant' ? '🤖' : '⚙️';
+
+            // Build DOM safely (avoid XSS via innerHTML)
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'message-avatar';
+            avatarDiv.textContent = avatar;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = String(content ?? '');
+
+            if (sources && sources.length > 0) {
+                const sourcesDiv = document.createElement('div');
+                sourcesDiv.className = 'message-sources';
+
+                sources.forEach(s => {
+                    const tag = document.createElement('span');
+                    tag.className = 'source-tag';
+
+                    const prefix = document.createElement('span');
+                    prefix.textContent = `📄 ${s.source} `;
+
+                    const score = document.createElement('span');
+                    score.className = 'score';
+                    const n = typeof s.score === 'number' ? s.score : Number(s.score);
+                    score.textContent = Number.isFinite(n) ? n.toFixed(3) : String(s.score);
+
+                    tag.appendChild(prefix);
+                    tag.appendChild(score);
+                    sourcesDiv.appendChild(tag);
+                });
+
+                contentDiv.appendChild(sourcesDiv);
+            }
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+            
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Show typing indicator
+        function showTyping() {
+            const container = document.getElementById('chatMessages');
+            const id = 'typing-' + Date.now();
+            
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = 'message assistant';
+            div.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            
+            return id;
+        }
+        
+        // Hide typing indicator
+        function hideTyping(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+        
+        // Handle enter key
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendQuery();
+            }
+        }
+        
+        // Auto-resize textarea
+        document.getElementById('queryInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+        
+        // Initialize
+        checkHealth();
+        setInterval(checkHealth, 30000); // Check every 30s
+    </script>
+</body>
+</html>

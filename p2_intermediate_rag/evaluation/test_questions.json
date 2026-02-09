@@ -1,0 +1,17 @@
+[
+  {
+    "question": "What is retrieval augmented generation?",
+    "expected_keywords": ["retrieval", "generation", "retrieve", "context"],
+    "expected_source": null
+  },
+  {
+    "question": "How does vector search work?",
+    "expected_keywords": ["embedding", "vector", "similarity", "cosine"],
+    "expected_source": null
+  },
+  {
+    "question": "What is BM25 used for?",
+    "expected_keywords": ["BM25", "keyword", "ranking", "sparse"],
+    "expected_source": null
+  }
+]
