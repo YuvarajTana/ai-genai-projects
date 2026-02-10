@@ -215,18 +215,33 @@ pytest tests/ --cov=src --cov-report=html
 
 ## 📈 Evaluation
 
-Compare with P1 using these metrics:
-- **Retrieval Precision@k**: How many retrieved documents are relevant
-- **Answer Faithfulness**: Is the answer grounded in the context
-- **Response Latency**: Time to generate answer
+A lightweight evaluation harness is included in `evaluation/`:
+
+```bash
+# Retrieval-only evaluation (no LLM needed)
+python evaluation/evaluate.py --retrieval-only
+
+# Full evaluation (retrieval + generation)
+python evaluation/evaluate.py
+
+# Save results to JSON
+python evaluation/evaluate.py --output results.json
+```
+
+Metrics computed:
+- **Precision@k** — proportion of retrieved docs containing expected keywords
+- **MRR** — mean reciprocal rank of first relevant result
+- **Answer Faithfulness** — keyword overlap between generated answer and expected keywords
+
+Edit `evaluation/test_questions.json` to add your own test questions.
 
 ## 🔜 Next Steps (P3)
 
 The next project will add:
-- Multi-modal support (images, tables)
-- OCR for scanned documents
-- Advanced table extraction
-- CLIP embeddings for images
+- Conversation memory management
+- Multi-turn retrieval with coreference resolution
+- Context window optimization
+- Session management
 
 ## 📝 License
 
