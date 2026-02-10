@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2 Intermediate RAG — Deep Dive</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+    <style>
+        :root{--bg:#0f1117;--s:#161b22;--s2:#1c2333;--bd:#30363d;--tx:#e6edf3;--dim:#8b949e;--a:#58a6ff;--a2:#bc8cff;--g:#3fb950;--o:#d29922;--r:#f85149;--pk:#f778ba}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.7}
+        nav{position:sticky;top:0;z-index:100;background:rgba(15,17,23,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd);padding:0 2rem}
+        nav ul{list-style:none;display:flex;gap:0;max-width:1200px;margin:0 auto;overflow-x:auto}
+        nav a{display:block;padding:.85rem 1.2rem;color:var(--dim);text-decoration:none;font-weight:600;font-size:.85rem;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+        nav a:hover,nav a.active{color:var(--a);border-bottom-color:var(--a)}
+        .container{max-width:1200px;margin:0 auto;padding:2rem}
+        section{margin-bottom:5rem;scroll-margin-top:4rem}
+        h1{font-size:2.6rem;margin-bottom:.5rem}h1 span{color:var(--a)}
+        .sub{color:var(--dim);font-size:1.1rem;margin-bottom:3rem}
+        h2{font-size:1.7rem;margin-bottom:1.5rem;padding-bottom:.7rem;border-bottom:2px solid var(--bd)}
+        h2 .n{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--a);color:var(--bg);font-size:.9rem;margin-right:.7rem}
+        h3{font-size:1.15rem;color:var(--a2);margin:1.5rem 0 .7rem}
+        .card{background:var(--s);border:1px solid var(--bd);border-radius:12px;padding:1.6rem;margin-bottom:1.4rem}
+        .cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.2rem}
+        pre{border-radius:8px;margin:1rem 0}pre code{font-size:.86rem;line-height:1.6}
+        code:not(pre code){background:var(--s2);padding:2px 7px;border-radius:4px;font-size:.86em;color:var(--a)}
+        .mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1rem;margin:1rem 0}
+        .m{background:var(--s2);border-radius:8px;padding:1rem 1.2rem;border-left:3px solid var(--a)}
+        .m .v{font-size:1.5rem;font-weight:800;color:var(--a)}.m .l{font-size:.78rem;color:var(--dim);margin-top:.2rem}
+        .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.6rem 1.4rem;background:var(--a);color:var(--bg);border:none;border-radius:8px;font-weight:700;font-size:.88rem;cursor:pointer;transition:all .2s}
+        .btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+        .btn-o{background:transparent;color:var(--a);border:1px solid var(--a)}.btn-o:hover{background:rgba(88,166,255,.1)}
+        .bg{display:flex;gap:.7rem;flex-wrap:wrap;margin:1rem 0}
+        /* Pipeline */
+        .pipe{display:flex;gap:0;margin:2rem 0;overflow-x:auto}
+        .ps{flex:1;min-width:120px;padding:1rem;background:var(--s);border:2px solid var(--bd);text-align:center;cursor:pointer;transition:all .3s;position:relative}
+        .ps:first-child{border-radius:10px 0 0 10px}.ps:last-child{border-radius:0 10px 10px 0}
+        .ps:not(:last-child)::after{content:'';position:absolute;right:-12px;top:50%;transform:translateY(-50%);border:10px solid transparent;border-left:10px solid var(--bd);z-index:2}
+        .ps .ic{font-size:1.6rem;margin-bottom:.3rem}.ps .lb{font-weight:700;font-size:.85rem}.ps .dt{font-size:.72rem;color:var(--dim);margin-top:.15rem}
+        .ps:hover,.ps.on{border-color:var(--a);background:rgba(88,166,255,.07)}.ps.on .lb{color:var(--a)}
+        /* Compare table */
+        .ct{width:100%;border-collapse:collapse;font-size:.85rem;margin:1rem 0}
+        .ct th{background:var(--s2);color:var(--a);text-align:left;padding:.7rem 1rem;border-bottom:2px solid var(--bd)}
+        .ct td{padding:.55rem 1rem;border-bottom:1px solid var(--bd);color:var(--dim)}.ct tr:hover td{background:rgba(88,166,255,.03)}
+        .ct .hi{color:var(--g);font-weight:700}
+        /* Similarity chart */
+        .sim-row{display:flex;align-items:center;gap:.7rem;margin:.35rem 0;font-size:.82rem;font-family:monospace}
+        .sim-label{width:200px;text-align:right;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+        .sim-track{flex:1;height:24px;background:var(--s2);border-radius:4px;position:relative;overflow:hidden}
+        .sim-bar{height:100%;border-radius:4px;transition:width .8s ease}
+        .sim-val{width:50px;text-align:right;font-weight:700;flex-shrink:0}
+        .brk{position:absolute;top:0;right:0;height:100%;width:3px;background:var(--r)}
+        /* Score bars */
+        .score-row{display:flex;align-items:center;gap:.6rem;margin:.4rem 0;font-size:.82rem}
+        .score-id{width:180px;text-align:right;color:var(--dim);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+        .score-bars{flex:1;display:flex;gap:2px;height:22px}
+        .score-seg{height:100%;border-radius:3px;transition:width .6s ease}
+        .score-val{width:50px;text-align:right;font-weight:700;flex-shrink:0}
+        .legend{display:flex;gap:1.2rem;margin:.7rem 0;font-size:.8rem}
+        .legend span{display:flex;align-items:center;gap:.4rem}
+        .legend .dot{width:12px;height:12px;border-radius:3px}
+        /* SVG canvas */
+        svg text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+        .tooltip{position:absolute;padding:8px 12px;background:var(--s);border:1px solid var(--bd);border-radius:6px;font-size:.8rem;pointer-events:none;opacity:0;transition:opacity .15s;z-index:10}
+        @media(max-width:768px){.pipe{flex-direction:column}.ps{border-radius:8px!important}.ps:not(:last-child)::after{display:none}h1{font-size:2rem}nav a{padding:.7rem .6rem;font-size:.78rem}}
+    </style>
+</head>
+<body>
+
+<nav>
+    <ul>
+        <li><a href="#overview" class="active">Overview</a></li>
+        <li><a href="#chunking">Chunking</a></li>
+        <li><a href="#hybrid">Hybrid Search</a></li>
+        <li><a href="#bm25">BM25</a></li>
+        <li><a href="#fusion">Score Fusion</a></li>
+        <li><a href="#reranking">Reranking</a></li>
+        <li><a href="#arch">Architecture</a></li>
+    </ul>
+</nav>
+
+<div class="container">
+
+<!-- ==================== OVERVIEW ==================== -->
+<section id="overview">
+    <h1>P2 Intermediate RAG <span>Deep Dive</span></h1>
+    <p class="sub">How semantic chunking, hybrid search, and cross-encoder reranking work together to dramatically improve retrieval quality over P1.</p>
+
+    <div class="pipe" id="mainPipe">
+        <div class="ps on" onclick="go('chunking')"><div class="ic">1</div><div class="lb">Semantic Chunk</div><div class="dt">Sentence boundaries</div></div>
+        <div class="ps" onclick="go('hybrid')"><div class="ic">2</div><div class="lb">Vector Search</div><div class="dt">Dense similarity</div></div>
+        <div class="ps" onclick="go('bm25')"><div class="ic">3</div><div class="lb">BM25 Search</div><div class="dt">Keyword matching</div></div>
+        <div class="ps" onclick="go('fusion')"><div class="ic">4</div><div class="lb">Score Fusion</div><div class="dt">0.7 vec + 0.3 bm25</div></div>
+        <div class="ps" onclick="go('reranking')"><div class="ic">5</div><div class="lb">Rerank</div><div class="dt">Cross-encoder</div></div>
+        <div class="ps" onclick="go('arch')"><div class="ic">6</div><div class="lb">Generate</div><div class="dt">Ollama LLM</div></div>
+    </div>
+
+    <h3>P1 vs P2 Comparison</h3>
+    <table class="ct">
+        <thead><tr><th>Component</th><th>P1 Simple</th><th>P2 Intermediate</th></tr></thead>
+        <tbody>
+            <tr><td>Chunking</td><td>Fixed 900-char windows</td><td class="hi">Semantic (sentence similarity) + Recursive (paragraph-aware)</td></tr>
+            <tr><td>Search</td><td>Vector only (cosine)</td><td class="hi">Hybrid: Vector + BM25 keyword search</td></tr>
+            <tr><td>Ranking</td><td>Raw distance only</td><td class="hi">Weighted fusion + Cross-encoder reranking</td></tr>
+            <tr><td>Interface</td><td>CLI only</td><td class="hi">CLI + FastAPI REST API + Web UI</td></tr>
+            <tr><td>Config</td><td>Hardcoded constants</td><td class="hi">YAML config + Pydantic validation</td></tr>
+            <tr><td>Streaming</td><td>Blocking</td><td class="hi">Server-Sent Events streaming</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- ==================== CHUNKING ==================== -->
+<section id="chunking">
+    <h2><span class="n">1</span> Semantic Chunking</h2>
+    <p>Instead of blindly splitting every 900 characters (P1), P2 splits at <strong>natural topic boundaries</strong> detected by measuring the semantic similarity between consecutive sentences.</p>
+
+    <div class="card">
+        <h3>Algorithm: 4 Steps</h3>
+        <pre><code class="language-python"># Step 1: Split into sentences
+sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+
+# Step 2: Embed each sentence
+embeddings = model.encode(sentences, normalize_embeddings=True)
+
+# Step 3: Find breakpoints (similarity drops)
+for i in range(len(embeddings) - 1):
+    sim = np.dot(embeddings[i], embeddings[i + 1])
+    if sim < (1 - breakpoint_threshold):   # default threshold: 0.3
+        breakpoints.append(i + 1)          # new chunk starts here
+
+# Step 4: Group sentences between breakpoints into chunks
+# Merge small chunks (< min_chunk_size) with neighbors
+# Split large chunks (> chunk_size) with overlap</code></pre>
+    </div>
+
+    <div class="card">
+        <h3>Similarity Between Consecutive Sentences</h3>
+        <p>The chart below simulates similarity scores between consecutive sentences. When the score drops below the threshold (red line), a new chunk begins.</p>
+        <div class="bg">
+            <button class="btn" onclick="randomizeSim()">Randomize Sentences</button>
+            <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;">
+                Threshold: <input type="range" id="threshSlider" min="0.3" max="0.9" step="0.05" value="0.7" oninput="drawSim()">
+                <span id="threshVal" style="font-family:monospace;color:var(--a);">0.70</span>
+            </label>
+        </div>
+        <div id="simChart"></div>
+        <div id="simChunks" style="margin-top:.5rem;font-size:.82rem;color:var(--dim);"></div>
+    </div>
+
+    <div class="card">
+        <h3>Recursive Chunking (Alternative)</h3>
+        <p>P2 also offers a recursive chunker that tries to split on <strong>natural boundaries in priority order</strong>:</p>
+        <pre><code class="language-python">separators = [
+    "\n\n",   # 1. Paragraphs (best boundary)
+    "\n",     # 2. Lines
+    ". ",     # 3. Sentences
+    "! ",     # 4. Exclamations
+    "? ",     # 5. Questions
+    "; ",     # 6. Semicolons
+    ", ",     # 7. Commas
+    " ",      # 8. Words
+    "",       # 9. Characters (last resort)
+]
+# If a piece is still > chunk_size after splitting by "\n\n",
+# try "\n", then ". ", and so on recursively.</code></pre>
+    </div>
+
+    <div class="cg">
+        <div class="m"><div class="v">1000</div><div class="l">Max chunk size (chars)</div></div>
+        <div class="m" style="border-left-color:var(--a2)"><div class="v" style="color:var(--a2)">100</div><div class="l">Min chunk size — merges tiny chunks with neighbors</div></div>
+        <div class="m" style="border-left-color:var(--g)"><div class="v" style="color:var(--g)">0.3</div><div class="l">Breakpoint threshold — lower = more chunks</div></div>
+    </div>
+</section>
+
+<!-- ==================== HYBRID SEARCH ==================== -->
+<section id="hybrid">
+    <h2><span class="n">2</span> Vector Search (Dense Retrieval)</h2>
+    <p>Same as P1 — embed the query, find the nearest vectors in ChromaDB. But in P2 it fetches <strong>3x more candidates</strong> (<code>k * 3</code>) because the hybrid + reranking pipeline will filter them down.</p>
+
+    <div class="card">
+        <h3>How Vector Search Ranks</h3>
+        <p>ChromaDB returns a raw <code>distance</code> (lower = more similar). P2 converts this to a similarity score:</p>
+        <pre><code class="language-python"># Convert distance to similarity (0 to 1)
+vector_score = 1 / (1 + distance)
+
+# distance=0.0 → score=1.0  (identical)
+# distance=0.5 → score=0.67
+# distance=1.0 → score=0.50
+# distance=5.0 → score=0.17  (very different)</code></pre>
+    </div>
+
+    <div class="card">
+        <h3>Why Vector Search Alone Isn't Enough</h3>
+        <p>Vector search captures <strong>meaning</strong> but can miss <strong>exact keyword matches</strong>:</p>
+        <table class="ct">
+            <thead><tr><th>Query</th><th>Vector Search Finds</th><th>Vector Search Misses</th></tr></thead>
+            <tbody>
+                <tr><td>"BM25 algorithm"</td><td>Chunks about search algorithms, ranking</td><td>Chunk that literally says "BM25" but is phrased differently</td></tr>
+                <tr><td>"error code 404"</td><td>Chunks about HTTP errors, web issues</td><td>Chunk containing the exact string "404"</td></tr>
+                <tr><td>"Dr. Smith's paper"</td><td>Chunks about research, papers</td><td>Chunk that mentions "Dr. Smith" by name</td></tr>
+            </tbody>
+        </table>
+        <p style="margin-top:.75rem;">This is why P2 adds BM25 keyword search as a complement.</p>
+    </div>
+</section>
+
+<!-- ==================== BM25 ==================== -->
+<section id="bm25">
+    <h2><span class="n">3</span> BM25 Keyword Search (Sparse Retrieval)</h2>
+    <p>BM25 (Best Matching 25) is a <strong>keyword-based</strong> ranking function. It scores documents by how often the query terms appear, adjusted for document length and term rarity.</p>
+
+    <div class="card">
+        <h3>Tokenization Pipeline</h3>
+        <pre><code class="language-python">def _tokenize(self, text):
+    text = text.lower()                          # normalize case
+    tokens = re.findall(r"\b\w+\b", text)        # split on word boundaries
+    tokens = [t for t in tokens                   # filter:
+              if len(t) > 1                       #   remove single chars
+              and t not in self._stopwords]       #   remove "the", "is", etc.
+
+    def stem(tok):                                # light stemming:
+        for suf in ("ing","edly","ed","ly","es","s"):
+            if tok.endswith(suf) and len(tok) > len(suf) + 2:
+                return tok[:-len(suf)]            #   "running" → "runn"
+        return tok
+    return [stem(t) for t in tokens]</code></pre>
+        <p style="margin-top:.7rem;">Example: <code>"What is machine learning?"</code> becomes <code>["machin", "learn"]</code></p>
+    </div>
+
+    <div class="card">
+        <h3>BM25 Scoring Formula</h3>
+        <p>For each query term, BM25 computes a score based on three factors:</p>
+        <div style="background:var(--s2);border-radius:8px;padding:1.5rem;margin:1rem 0;font-family:monospace;text-align:center;font-size:1.1rem;line-height:2">
+            score(q, d) = <span style="color:var(--a)">IDF(q)</span> * <span style="color:var(--g)">tf(q,d) * (k1 + 1)</span> / (<span style="color:var(--g)">tf(q,d)</span> + k1 * (1 - b + b * <span style="color:var(--o)">|d|/avgdl</span>))
+        </div>
+        <div class="cg" style="margin-top:1rem;">
+            <div class="m" style="border-left-color:var(--a)"><div class="v" style="color:var(--a);font-size:1rem">IDF</div><div class="l">Inverse Document Frequency — rare terms score higher ("machine" > "the")</div></div>
+            <div class="m" style="border-left-color:var(--g)"><div class="v" style="color:var(--g);font-size:1rem">TF</div><div class="l">Term Frequency — more occurrences = higher score (with saturation via k1=1.5)</div></div>
+            <div class="m" style="border-left-color:var(--o)"><div class="v" style="color:var(--o);font-size:1rem">|d|/avgdl</div><div class="l">Length normalization — shorter docs with same term count score higher (b=0.75)</div></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Interactive: BM25 vs Vector — What Each Finds</h3>
+        <p>Type a query below to see which chunks each method would rank highest.</p>
+        <div style="display:flex;gap:.7rem;margin:1rem 0;">
+            <input type="text" id="queryInput" value="BM25 keyword search algorithm" placeholder="Type a query..."
+                   style="flex:1;padding:.7rem 1rem;background:var(--s2);border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-size:.9rem;outline:none;"
+                   oninput="updateSearchDemo()">
+        </div>
+        <div id="searchDemo"></div>
+    </div>
+</section>
+
+<!-- ==================== SCORE FUSION ==================== -->
+<section id="fusion">
+    <h2><span class="n">4</span> Score Fusion</h2>
+    <p>P2 combines vector and BM25 results using <strong>weighted linear combination</strong>, then deduplicates by chunk ID.</p>
+
+    <div class="card">
+        <h3>The Formula</h3>
+        <pre><code class="language-python"># Default weights
+vector_weight = 0.7    # semantic understanding
+bm25_weight   = 0.3    # keyword matching
+
+# For each chunk found by either method:
+combined_score = vector_weight * vector_score + bm25_weight * bm25_score
+
+# Chunks found only by vector: bm25_score = 0
+# Chunks found only by BM25:   vector_score = 0
+# Chunks found by both: get full combined score (boosted!)</code></pre>
+    </div>
+
+    <div class="card">
+        <h3>Interactive: Score Fusion Visualization</h3>
+        <p>Drag the weight slider to see how changing the balance between vector and BM25 reorders results.</p>
+        <label style="display:flex;align-items:center;gap:.7rem;margin:1rem 0;font-size:.85rem;">
+            Vector weight: <input type="range" id="vecWeight" min="0" max="1" step="0.05" value="0.7" oninput="drawFusion()">
+            <span id="vecWVal" style="font-family:monospace;color:var(--a);">0.70</span>
+            &nbsp;|&nbsp; BM25 weight: <span id="bm25WVal" style="font-family:monospace;color:var(--g);">0.30</span>
+        </label>
+        <div class="legend">
+            <span><div class="dot" style="background:var(--a)"></div> Vector score</span>
+            <span><div class="dot" style="background:var(--g)"></div> BM25 score</span>
+            <span><div class="dot" style="background:var(--o)"></div> Combined</span>
+        </div>
+        <div id="fusionChart"></div>
+    </div>
+</section>
+
+<!-- ==================== RERANKING ==================== -->
+<section id="reranking">
+    <h2><span class="n">5</span> Cross-Encoder Reranking</h2>
+    <p>The final stage feeds each <strong>(query, chunk)</strong> pair through a Cross-Encoder that evaluates relevance jointly — much more accurate than independent embeddings.</p>
+
+    <div class="card">
+        <h3>Bi-Encoder vs Cross-Encoder</h3>
+        <div class="cg">
+            <div class="card" style="border-color:var(--a);">
+                <h3 style="color:var(--a)">Bi-Encoder (Stage 1-2)</h3>
+                <pre><code class="language-text">Query  ──► Encoder ──► Vector A
+                                    ► cosine(A, B)
+Chunk  ──► Encoder ──► Vector B
+
+Fast: encode once, compare many
+But: independent encoding misses
+     query-document interactions</code></pre>
+            </div>
+            <div class="card" style="border-color:var(--g);">
+                <h3 style="color:var(--g)">Cross-Encoder (Stage 5)</h3>
+                <pre><code class="language-text">[Query] + [SEP] + [Chunk]
+         │
+    ┌────▼────┐
+    │Transformer│   Sees BOTH together
+    │ 6 layers  │   Full attention between
+    └────┬────┘   query and chunk tokens
+         │
+    Relevance Score (single number)</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>The Code</h3>
+        <pre><code class="language-python">class Reranker:
+    def rerank(self, query, results, top_n=4):
+        # Create (query, chunk) pairs
+        pairs = [(query, r["text"]) for r in results]
+
+        # Cross-encoder scores all pairs jointly
+        scores = self.model.predict(pairs)
+
+        # Attach scores and sort
+        for result, score in zip(results, scores):
+            result["rerank_score"] = float(score)
+        results.sort(key=lambda x: x["rerank_score"], reverse=True)
+
+        return results[:top_n]  # Return only the best</code></pre>
+    </div>
+
+    <div class="card">
+        <h3>Interactive: Before vs After Reranking</h3>
+        <p>Click "Rerank" to see how the cross-encoder reshuffles results that the fusion stage produced.</p>
+        <div class="bg">
+            <button class="btn" onclick="animateRerank()">Rerank</button>
+            <button class="btn btn-o" onclick="resetRerank()">Reset</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;" id="rerankVis">
+            <div><h3 style="margin-top:0">Before (Fusion Score)</h3><div id="rerankBefore"></div></div>
+            <div><h3 style="margin-top:0">After (Rerank Score)</h3><div id="rerankAfter"></div></div>
+        </div>
+    </div>
+
+    <div class="mg">
+        <div class="m"><div class="v">ms-marco</div><div class="l">Model: cross-encoder/ms-marco-MiniLM-L-6-v2</div></div>
+        <div class="m" style="border-left-color:var(--r)"><div class="v" style="color:var(--r)">Slow</div><div class="l">Processes each (query, chunk) pair — O(n) per query. Used only on top candidates</div></div>
+        <div class="m" style="border-left-color:var(--g)"><div class="v" style="color:var(--g)">Accurate</div><div class="l">Joint attention captures query-document interactions that bi-encoders miss</div></div>
+    </div>
+</section>
+
+<!-- ==================== ARCHITECTURE ==================== -->
+<section id="arch">
+    <h2><span class="n">6</span> Full Architecture</h2>
+    <p>The complete P2 retrieval pipeline from query to answer.</p>
+
+    <div class="card">
+        <h3>End-to-End Flow</h3>
+        <svg id="archSvg" width="100%" height="420" style="background:var(--s2);border-radius:10px;border:1px solid var(--bd);"></svg>
+    </div>
+
+    <div class="card">
+        <h3>Project Structure</h3>
+        <pre><code class="language-text">p2_intermediate_rag/
+├── src/
+│   ├── loaders/           # TXT, PDF, DOCX, HTML (factory pattern)
+│   ├── chunking/          # Semantic, Recursive, Character (strategy pattern)
+│   ├── embeddings/        # SentenceTransformer (base class + impl)
+│   ├── retrieval/
+│   │   ├── vector_store   # ChromaDB wrapper
+│   │   ├── bm25_search    # BM25Okapi with tokenization
+│   │   ├── hybrid_retriever  # Orchestrates vector + BM25 + reranker
+│   │   └── reranker       # Cross-encoder wrapper
+│   ├── generation/        # Ollama LLM + prompt builder
+│   └── api/               # FastAPI with streaming
+├── frontend/              # Dark-theme Web UI
+├── evaluation/            # Precision@k, MRR harness
+├── config.yaml            # All parameters in one place
+└── pyproject.toml         # Proper Python packaging</code></pre>
+    </div>
+
+    <div class="mg">
+        <div class="m"><div class="v">3</div><div class="l">Chunking strategies (switchable via config)</div></div>
+        <div class="m" style="border-left-color:var(--g)"><div class="v" style="color:var(--g)">5</div><div class="l">File formats (TXT, MD, PDF, DOCX, HTML)</div></div>
+        <div class="m" style="border-left-color:var(--a2)"><div class="v" style="color:var(--a2)">6</div><div class="l">API endpoints (health, index, query, stream, stats, clear)</div></div>
+        <div class="m" style="border-left-color:var(--o)"><div class="v" style="color:var(--o)">Loguru</div><div class="l">Structured logging throughout</div></div>
+    </div>
+</section>
+
+</div>
+
+<div class="tooltip" id="tip"></div>
+
+<script>
+/* ============ NAV ============ */
+const links=document.querySelectorAll('nav a'),secs=document.querySelectorAll('section');
+window.addEventListener('scroll',()=>{let c='';secs.forEach(s=>{if(scrollY>=s.offsetTop-100)c=s.id});links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+c))});
+function go(id){document.getElementById(id).scrollIntoView({behavior:'smooth'})}
+hljs.highlightAll();
+
+/* ============ SIMILARITY CHART ============ */
+const sentencePool=[
+    "Machine learning is a subset of artificial intelligence.",
+    "Deep learning uses neural networks with many layers.",
+    "Supervised learning requires labeled training data.",
+    "The quick brown fox jumps over the lazy dog.",
+    "Python is a popular programming language for data science.",
+    "RAG combines retrieval with language model generation.",
+    "Vector databases store high-dimensional embeddings.",
+    "BM25 is a keyword-based ranking function.",
+    "ChromaDB is an open-source vector database.",
+    "Natural language processing handles text understanding.",
+    "Transformers revolutionized NLP in 2017.",
+    "Ollama runs large language models locally.",
+    "FastAPI is a modern Python web framework.",
+    "Cross-encoders are more accurate than bi-encoders.",
+    "Docker containers package applications with dependencies.",
+];
+let simSentences=[], simScores=[];
+function randomizeSim(){
+    simSentences=[];
+    for(let i=0;i<10;i++) simSentences.push(sentencePool[Math.floor(Math.random()*sentencePool.length)]);
+    simScores=[];
+    for(let i=0;i<simSentences.length-1;i++){
+        const a=simSentences[i].toLowerCase(),b=simSentences[i+1].toLowerCase();
+        const wa=new Set(a.split(/\W+/)),wb=new Set(b.split(/\W+/));
+        const inter=[...wa].filter(x=>wb.has(x)&&x.length>2).length;
+        simScores.push(Math.min(0.95,0.3+inter*0.15+Math.random()*0.15));
+    }
+    drawSim();
+}
+function drawSim(){
+    const thresh=+document.getElementById('threshSlider').value;
+    document.getElementById('threshVal').textContent=thresh.toFixed(2);
+    const el=document.getElementById('simChart');
+    el.innerHTML='';
+    let chunkCount=1, chunkStarts=[0];
+    simScores.forEach((s,i)=>{
+        const pct=(s*100).toFixed(0);
+        const isBreak=s<thresh;
+        if(isBreak){chunkCount++;chunkStarts.push(i+1)}
+        const color=isBreak?'var(--r)':s>0.8?'var(--g)':'var(--a)';
+        el.innerHTML+=`<div class="sim-row"><div class="sim-label" title="${simSentences[i]}">${simSentences[i].substring(0,35)}...</div><div class="sim-track"><div class="sim-bar" style="width:${pct}%;background:${color};"></div>${isBreak?'<div class="brk"></div>':''}</div><div class="sim-val" style="color:${color}">${s.toFixed(2)}</div></div>`;
+    });
+    document.getElementById('simChunks').textContent=`Threshold ${thresh.toFixed(2)} → ${chunkCount} chunk(s) created. Breakpoints at sentence indices: [${chunkStarts.join(', ')}]`;
+}
+randomizeSim();
+
+/* ============ SEARCH DEMO ============ */
+const demoChunks=[
+    {id:'doc1::0', text:'BM25 is a bag-of-words retrieval function that ranks documents based on query term frequency.', topic:'search'},
+    {id:'doc1::1', text:'The algorithm was developed as part of the Okapi information retrieval system at City University London.', topic:'search'},
+    {id:'doc2::0', text:'Vector similarity search finds the nearest embeddings in high-dimensional space using cosine distance.', topic:'vector'},
+    {id:'doc2::1', text:'Keyword matching is essential when users search for specific terms, error codes, or proper nouns.', topic:'search'},
+    {id:'doc3::0', text:'Hybrid search combines dense vector retrieval with sparse keyword methods for better recall.', topic:'hybrid'},
+    {id:'doc3::1', text:'Sentence transformers encode text into fixed-size vectors capturing semantic meaning.', topic:'vector'},
+];
+function simpleVecScore(query, text){
+    const qw=new Set(query.toLowerCase().split(/\W+/).filter(w=>w.length>2));
+    const tw=new Set(text.toLowerCase().split(/\W+/).filter(w=>w.length>2));
+    const common=[...qw].filter(x=>tw.has(x)).length;
+    return Math.min(0.95, 0.2+common*0.18+Math.random()*0.05);
+}
+function simpleBm25(query, text){
+    const qt=query.toLowerCase().split(/\W+/).filter(w=>w.length>2);
+    const tt=text.toLowerCase();
+    let sc=0; qt.forEach(t=>{const re=new RegExp('\\b'+t,'gi');const m=tt.match(re);if(m)sc+=m.length*0.3});
+    return Math.min(1, sc+Math.random()*0.05);
+}
+function updateSearchDemo(){
+    const q=document.getElementById('queryInput').value;
+    const el=document.getElementById('searchDemo');
+    if(!q.trim()){el.innerHTML='';return}
+    const results=demoChunks.map(c=>({...c, vec:simpleVecScore(q,c.text), bm25:simpleBm25(q,c.text)}));
+    const vecSorted=[...results].sort((a,b)=>b.vec-a.vec);
+    const bm25Sorted=[...results].sort((a,b)=>b.bm25-a.bm25);
+    let html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1rem;">';
+    html+='<div><h3 style="color:var(--a);margin-top:0">Vector Search Results</h3>';
+    vecSorted.slice(0,4).forEach((r,i)=>{html+=`<div class="score-row"><div class="score-id">#${i+1} ${r.id}</div><div class="score-bars"><div class="score-seg" style="width:${r.vec*100}%;background:var(--a);border-radius:3px;"></div></div><div class="score-val" style="color:var(--a)">${r.vec.toFixed(2)}</div></div><div style="font-size:.75rem;color:var(--dim);margin:0 0 .6rem 0;padding-left:190px;">${r.text.substring(0,60)}...</div>`});
+    html+='</div><div><h3 style="color:var(--g);margin-top:0">BM25 Search Results</h3>';
+    bm25Sorted.slice(0,4).forEach((r,i)=>{html+=`<div class="score-row"><div class="score-id">#${i+1} ${r.id}</div><div class="score-bars"><div class="score-seg" style="width:${r.bm25*100}%;background:var(--g);border-radius:3px;"></div></div><div class="score-val" style="color:var(--g)">${r.bm25.toFixed(2)}</div></div><div style="font-size:.75rem;color:var(--dim);margin:0 0 .6rem 0;padding-left:190px;">${r.text.substring(0,60)}...</div>`});
+    html+='</div></div>';
+    el.innerHTML=html;
+}
+updateSearchDemo();
+
+/* ============ FUSION CHART ============ */
+const fusionData=[
+    {id:'doc1::0',vec:.82,bm25:.95,text:'BM25 is a bag-of-words retrieval function...'},
+    {id:'doc3::0',vec:.78,bm25:.70,text:'Hybrid search combines dense vector retrieval...'},
+    {id:'doc2::0',vec:.91,bm25:.10,text:'Vector similarity search finds nearest embeddings...'},
+    {id:'doc2::1',vec:.45,bm25:.88,text:'Keyword matching is essential when users search...'},
+    {id:'doc1::1',vec:.60,bm25:.35,text:'The algorithm was developed as part of Okapi...'},
+    {id:'doc3::1',vec:.72,bm25:.05,text:'Sentence transformers encode text into fixed-size...'},
+];
+function drawFusion(){
+    const vw=+document.getElementById('vecWeight').value;
+    const bw=+(1-vw).toFixed(2);
+    document.getElementById('vecWVal').textContent=vw.toFixed(2);
+    document.getElementById('bm25WVal').textContent=bw.toFixed(2);
+    const scored=fusionData.map(d=>({...d,combined:vw*d.vec+bw*d.bm25}));
+    scored.sort((a,b)=>b.combined-a.combined);
+    const el=document.getElementById('fusionChart');
+    el.innerHTML='';
+    scored.forEach(d=>{
+        const maxW=Math.max(...scored.map(s=>s.combined))||1;
+        el.innerHTML+=`<div class="score-row"><div class="score-id">${d.id}</div><div class="score-bars"><div class="score-seg" style="width:${d.vec/maxW*70*vw}%;background:var(--a);opacity:.8;"></div><div class="score-seg" style="width:${d.bm25/maxW*70*bw}%;background:var(--g);opacity:.8;"></div></div><div class="score-val" style="color:var(--o)">${d.combined.toFixed(2)}</div></div>`;
+    });
+}
+drawFusion();
+
+/* ============ RERANK ============ */
+const rerankData=[
+    {id:'doc1::0',fusion:.87,rerank:.92,text:'BM25 retrieval function ranks documents...'},
+    {id:'doc3::0',fusion:.76,rerank:.88,text:'Hybrid search combines dense + sparse...'},
+    {id:'doc2::0',fusion:.67,rerank:.95,text:'Vector similarity search finds nearest...'},
+    {id:'doc2::1',fusion:.58,rerank:.41,text:'Keyword matching for specific terms...'},
+    {id:'doc1::1',fusion:.52,rerank:.35,text:'Algorithm developed at City University...'},
+    {id:'doc3::1',fusion:.48,rerank:.62,text:'Sentence transformers encode text...'},
+];
+let rerankAnimated=false;
+function drawRerankBars(containerId,data,field,color){
+    const el=document.getElementById(containerId);el.innerHTML='';
+    data.forEach((d,i)=>{
+        el.innerHTML+=`<div class="score-row"><div class="score-id" style="width:120px">${d.id}</div><div class="score-bars"><div class="score-seg" style="width:${d[field]*100}%;background:${color};"></div></div><div class="score-val" style="color:${color}">${d[field].toFixed(2)}</div></div>`;
+    });
+}
+function resetRerank(){
+    rerankAnimated=false;
+    const byFusion=[...rerankData].sort((a,b)=>b.fusion-a.fusion);
+    drawRerankBars('rerankBefore',byFusion,'fusion','var(--o)');
+    document.getElementById('rerankAfter').innerHTML='<div style="color:var(--dim);font-size:.85rem;padding:1rem;">Click "Rerank" to see cross-encoder results</div>';
+}
+function animateRerank(){
+    const byFusion=[...rerankData].sort((a,b)=>b.fusion-a.fusion);
+    drawRerankBars('rerankBefore',byFusion,'fusion','var(--o)');
+    const byRerank=[...rerankData].sort((a,b)=>b.rerank-a.rerank);
+    setTimeout(()=>drawRerankBars('rerankAfter',byRerank,'rerank','var(--a2)'),300);
+}
+resetRerank();
+
+/* ============ ARCHITECTURE DIAGRAM ============ */
+(function(){
+    const svg=d3.select('#archSvg');
+    const w=document.getElementById('archSvg').clientWidth||900, h=420;
+    svg.attr('viewBox',`0 0 ${w} ${h}`);
+    const boxes=[
+        {x:40,y:180,w:90,h:50,text:'Query',color:'#58a6ff'},
+        {x:170,y:100,w:110,h:50,text:'Vector Search',color:'#58a6ff'},
+        {x:170,y:260,w:110,h:50,text:'BM25 Search',color:'#3fb950'},
+        {x:340,y:180,w:110,h:50,text:'Score Fusion',color:'#d29922'},
+        {x:510,y:180,w:100,h:50,text:'Reranker',color:'#bc8cff'},
+        {x:670,y:130,w:110,h:50,text:'Prompt Build',color:'#8b949e'},
+        {x:670,y:230,w:110,h:50,text:'Ollama LLM',color:'#f85149'},
+        {x:w-130,y:180,w:90,h:50,text:'Answer',color:'#3fb950'},
+    ];
+    const arrows=[
+        [0,1],[0,2],[1,3],[2,3],[3,4],[4,5],[5,6],[6,7]
+    ];
+    arrows.forEach(([a,b])=>{
+        const s=boxes[a],t=boxes[b];
+        const sx=s.x+s.w,sy=s.y+s.h/2,tx=t.x,ty=t.y+t.h/2;
+        svg.append('line').attr('x1',sx).attr('y1',sy).attr('x2',tx).attr('y2',ty)
+            .attr('stroke','#30363d').attr('stroke-width',2).attr('marker-end','url(#arrowhead)');
+    });
+    svg.append('defs').append('marker').attr('id','arrowhead').attr('markerWidth',10).attr('markerHeight',7).attr('refX',10).attr('refY',3.5).attr('orient','auto')
+        .append('polygon').attr('points','0 0, 10 3.5, 0 7').attr('fill','#30363d');
+    boxes.forEach(b=>{
+        svg.append('rect').attr('x',b.x).attr('y',b.y).attr('width',b.w).attr('height',b.h)
+            .attr('rx',8).attr('fill','rgba(0,0,0,0.3)').attr('stroke',b.color).attr('stroke-width',2);
+        svg.append('text').attr('x',b.x+b.w/2).attr('y',b.y+b.h/2+5).attr('text-anchor','middle')
+            .attr('fill',b.color).attr('font-size',12).attr('font-weight',700).text(b.text);
+    });
+    // Labels
+    svg.append('text').attr('x',170+55).attr('y',85).attr('text-anchor','middle').attr('fill','#8b949e').attr('font-size',10).text('k*3 candidates');
+    svg.append('text').attr('x',170+55).attr('y',325).attr('text-anchor','middle').attr('fill','#8b949e').attr('font-size',10).text('k*3 candidates');
+    svg.append('text').attr('x',340+55).attr('y',168).attr('text-anchor','middle').attr('fill','#8b949e').attr('font-size',10).text('0.7 vec + 0.3 bm25');
+    svg.append('text').attr('x',510+50).attr('y',168).attr('text-anchor','middle').attr('fill','#8b949e').attr('font-size',10).text('top-k final');
+})();
+</script>
+</body>
+</html>

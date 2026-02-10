@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Indexing Pipeline — Deep Dive</title>
+    <!-- Highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <!-- D3.js for vector space visualization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #161b22;
+            --surface2: #1c2333;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-dim: #8b949e;
+            --accent: #58a6ff;
+            --accent2: #bc8cff;
+            --green: #3fb950;
+            --orange: #d29922;
+            --red: #f85149;
+            --pink: #f778ba;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        /* --- NAV --- */
+        nav {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(15,17,23,0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+        }
+        nav ul {
+            list-style: none; display: flex; gap: 0;
+            max-width: 1200px; margin: 0 auto;
+        }
+        nav a {
+            display: block; padding: 1rem 1.5rem;
+            color: var(--text-dim); text-decoration: none;
+            font-weight: 600; font-size: 0.9rem;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        nav a:hover, nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        /* --- LAYOUT --- */
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        section { margin-bottom: 5rem; scroll-margin-top: 4rem; }
+        h1 { font-size: 2.8rem; margin-bottom: 0.5rem; }
+        h1 span { color: var(--accent); }
+        .subtitle { color: var(--text-dim); font-size: 1.15rem; margin-bottom: 3rem; }
+        h2 {
+            font-size: 1.8rem; margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border);
+        }
+        h2 .step-num {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 40px; height: 40px; border-radius: 50%;
+            background: var(--accent); color: var(--bg);
+            font-size: 1rem; margin-right: 0.75rem;
+        }
+        h3 { font-size: 1.2rem; color: var(--accent2); margin: 1.5rem 0 0.75rem; }
+
+        /* --- CARDS --- */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
+
+        /* --- CODE --- */
+        pre { border-radius: 8px; margin: 1rem 0; }
+        pre code { font-size: 0.88rem; line-height: 1.65; }
+        code:not(pre code) {
+            background: var(--surface2); padding: 2px 7px; border-radius: 4px;
+            font-size: 0.88em; color: var(--accent);
+        }
+
+        /* --- PIPELINE STRIP --- */
+        .pipeline {
+            display: flex; align-items: stretch; gap: 0;
+            margin: 2rem 0; overflow-x: auto;
+        }
+        .pipe-step {
+            flex: 1; min-width: 180px; padding: 1.25rem;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            text-align: center; cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .pipe-step:first-child { border-radius: 12px 0 0 12px; }
+        .pipe-step:last-child { border-radius: 0 12px 12px 0; }
+        .pipe-step:not(:last-child)::after {
+            content: ''; position: absolute; right: -14px; top: 50%;
+            transform: translateY(-50%);
+            border: 12px solid transparent; border-left: 12px solid var(--border);
+            z-index: 2;
+        }
+        .pipe-step .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+        .pipe-step .label { font-weight: 700; font-size: 0.95rem; }
+        .pipe-step .detail { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.25rem; }
+        .pipe-step:hover, .pipe-step.active {
+            border-color: var(--accent);
+            background: rgba(88,166,255,0.08);
+        }
+        .pipe-step.active .label { color: var(--accent); }
+
+        /* --- CHUNKING VISUAL --- */
+        .chunk-visual {
+            display: flex; flex-direction: column; gap: 0.5rem;
+            margin: 1.5rem 0; font-family: monospace; font-size: 0.82rem;
+        }
+        .chunk-bar-row { display: flex; align-items: center; gap: 1rem; }
+        .chunk-bar-label { width: 80px; text-align: right; color: var(--text-dim); font-weight: 600; flex-shrink: 0; }
+        .chunk-bar-track { flex: 1; height: 36px; background: var(--surface2); border-radius: 6px; position: relative; overflow: hidden; }
+        .chunk-bar {
+            position: absolute; top: 4px; height: 28px;
+            border-radius: 4px; display: flex; align-items: center;
+            justify-content: center; font-size: 0.75rem; font-weight: 700;
+            transition: all 0.6s ease;
+        }
+        .chunk-bar.c0 { background: rgba(88,166,255,0.3); border: 1px solid var(--accent); color: var(--accent); }
+        .chunk-bar.c1 { background: rgba(188,140,255,0.3); border: 1px solid var(--accent2); color: var(--accent2); }
+        .chunk-bar.c2 { background: rgba(63,185,80,0.3); border: 1px solid var(--green); color: var(--green); }
+        .chunk-bar.c3 { background: rgba(210,153,34,0.3); border: 1px solid var(--orange); color: var(--orange); }
+        .overlap-marker {
+            position: absolute; top: 0; height: 100%;
+            background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(248,81,73,0.15) 3px, rgba(248,81,73,0.15) 6px);
+            border-left: 2px dashed var(--red); border-right: 2px dashed var(--red);
+        }
+
+        /* --- EMBED VISUAL (D3 canvas) --- */
+        .embed-container { position: relative; }
+        #vectorCanvas {
+            width: 100%; height: 400px;
+            background: var(--surface2); border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .d3-tooltip {
+            position: absolute; padding: 8px 12px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 6px; font-size: 0.8rem; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s;
+        }
+
+        /* --- STORE VISUAL --- */
+        .db-table {
+            width: 100%; border-collapse: collapse; margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+        .db-table th {
+            background: var(--surface2); color: var(--accent);
+            text-align: left; padding: 0.75rem 1rem;
+            border-bottom: 2px solid var(--border);
+        }
+        .db-table td {
+            padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);
+            color: var(--text-dim);
+        }
+        .db-table tr:hover td { background: rgba(88,166,255,0.04); }
+        .db-table .mono { font-family: monospace; color: var(--green); font-size: 0.82rem; }
+
+        /* --- BUTTONS --- */
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.65rem 1.5rem;
+            background: var(--accent); color: var(--bg);
+            border: none; border-radius: 8px;
+            font-weight: 700; font-size: 0.9rem;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        .btn-outline {
+            background: transparent; color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+        .btn-outline:hover { background: rgba(88,166,255,0.1); }
+        .btn-group { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1rem 0; }
+
+        /* --- METRICS --- */
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .metric {
+            background: var(--surface2); border-radius: 8px; padding: 1rem 1.25rem;
+            border-left: 3px solid var(--accent);
+        }
+        .metric .val { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+        .metric .label { font-size: 0.8rem; color: var(--text-dim); margin-top: 0.25rem; }
+
+        /* --- ANIMATE --- */
+        @keyframes fadeSlideIn { from { opacity:0; transform:translateY(20px);} to { opacity:1; transform:translateY(0);} }
+        .animate-in { animation: fadeSlideIn 0.5s ease forwards; }
+
+        /* --- RESPONSIVE --- */
+        @media (max-width: 768px) {
+            .pipeline { flex-direction: column; }
+            .pipe-step { border-radius: 8px !important; }
+            .pipe-step:not(:last-child)::after { display: none; }
+            h1 { font-size: 2rem; }
+            nav a { padding: 0.75rem 0.75rem; font-size: 0.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <ul>
+        <li><a href="#overview" class="active">Overview</a></li>
+        <li><a href="#loading">Loading</a></li>
+        <li><a href="#chunking">Chunking</a></li>
+        <li><a href="#embedding">Embedding</a></li>
+        <li><a href="#storage">Storage</a></li>
+    </ul>
+</nav>
+
+<div class="container">
+
+    <!-- ============ OVERVIEW ============ -->
+    <section id="overview">
+        <h1>RAG Indexing Pipeline <span>Deep Dive</span></h1>
+        <p class="subtitle">Interactive visual guide to how documents become searchable vectors in P1 Simple RAG</p>
+
+        <div class="pipeline" id="mainPipeline">
+            <div class="pipe-step active" onclick="scrollToSection('loading')">
+                <div class="icon">1</div>
+                <div class="label">Load</div>
+                <div class="detail">TXT, PDF, DOCX, MD</div>
+            </div>
+            <div class="pipe-step" onclick="scrollToSection('chunking')">
+                <div class="icon">2</div>
+                <div class="label">Chunk</div>
+                <div class="detail">900 chars, 120 overlap</div>
+            </div>
+            <div class="pipe-step" onclick="scrollToSection('embedding')">
+                <div class="icon">3</div>
+                <div class="label">Embed</div>
+                <div class="detail">384-dim vectors</div>
+            </div>
+            <div class="pipe-step" onclick="scrollToSection('storage')">
+                <div class="icon">4</div>
+                <div class="label">Store</div>
+                <div class="detail">ChromaDB + HNSW</div>
+            </div>
+        </div>
+
+        <div class="metric-grid">
+            <div class="metric"><div class="val">4</div><div class="label">File formats supported</div></div>
+            <div class="metric"><div class="val">900</div><div class="label">Characters per chunk</div></div>
+            <div class="metric"><div class="val">384</div><div class="label">Embedding dimensions</div></div>
+            <div class="metric"><div class="val">O(log n)</div><div class="label">HNSW search complexity</div></div>
+        </div>
+    </section>
+
+    <!-- ============ STEP 1: LOADING ============ -->
+    <section id="loading">
+        <h2><span class="step-num">1</span> Document Loading</h2>
+        <p>The pipeline starts by scanning the <code>./data/</code> directory recursively and extracting raw text from each supported file format.</p>
+
+        <div class="card-grid">
+            <div class="card">
+                <h3>.txt / .md</h3>
+                <p>Read the file as UTF-8 text with <code>errors="ignore"</code> to handle encoding issues gracefully.</p>
+                <pre><code class="language-python">def load_txt(path: str) -> str:
+    with open(path, "r", encoding="utf-8",
+              errors="ignore") as f:
+        return f.read()</code></pre>
+            </div>
+            <div class="card">
+                <h3>.pdf</h3>
+                <p>Extract text page-by-page using <code>pypdf</code>. Each page's text is joined with newlines. Scanned PDFs return empty strings (no OCR).</p>
+                <pre><code class="language-python">def load_pdf(path: str) -> str:
+    reader = PdfReader(path)
+    parts = []
+    for page in reader.pages:
+        parts.append(page.extract_text() or "")
+    return "\n".join(parts)</code></pre>
+            </div>
+            <div class="card">
+                <h3>.docx</h3>
+                <p>Extract paragraph text using <code>python-docx</code>. Tables, headers, and footers are not captured — only the body text.</p>
+                <pre><code class="language-python">def load_docx(path: str) -> str:
+    d = docx.Document(path)
+    return "\n".join(
+        p.text for p in d.paragraphs
+    )</code></pre>
+            </div>
+            <div class="card">
+                <h3>Dispatcher</h3>
+                <p>A simple function routes each file to the correct loader by extension. Unsupported types raise a <code>ValueError</code>.</p>
+                <pre><code class="language-python">def load_file(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".txt", ".md"):
+        return load_txt(path)
+    if ext == ".pdf":
+        return load_pdf(path)
+    if ext == ".docx":
+        return load_docx(path)
+    raise ValueError(f"Unsupported: {ext}")</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ STEP 2: CHUNKING ============ -->
+    <section id="chunking">
+        <h2><span class="step-num">2</span> Text Chunking</h2>
+        <p>Raw text is split into fixed-size overlapping windows. The overlap ensures that information at boundaries is preserved in at least one chunk.</p>
+
+        <div class="card">
+            <h3>Algorithm: Sliding Window</h3>
+            <pre><code class="language-python">def chunk_text(text, chunk_size=900, overlap=120):
+    text = clean_text(text)       # collapse whitespace
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(len(text), start + chunk_size)
+        chunks.append(text[start:end])
+        start = end - overlap     # slide back by overlap
+        if end == len(text):
+            break
+    return chunks</code></pre>
+        </div>
+
+        <div class="card">
+            <h3>Interactive Chunking Demo</h3>
+            <p>Adjust the parameters and see how the document gets split. Hatched regions are overlaps.</p>
+            <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:1rem 0;">
+                <label>Doc length: <input type="range" id="docLen" min="500" max="5000" value="2500" step="100" oninput="updateChunkVis()"> <span id="docLenVal">2500</span></label>
+                <label>Chunk size: <input type="range" id="chunkSize" min="200" max="1500" value="900" step="50" oninput="updateChunkVis()"> <span id="chunkSizeVal">900</span></label>
+                <label>Overlap: <input type="range" id="overlapSize" min="0" max="400" value="120" step="10" oninput="updateChunkVis()"> <span id="overlapVal">120</span></label>
+            </div>
+            <div class="chunk-visual" id="chunkVisual"></div>
+            <div id="chunkStats" style="color:var(--text-dim);font-size:0.85rem;margin-top:0.5rem;"></div>
+        </div>
+
+        <div class="card">
+            <h3>Why These Defaults?</h3>
+            <div class="card-grid" style="margin-top:0.75rem;">
+                <div class="metric"><div class="val">900</div><div class="label">Chunk size — roughly 150-180 words. Fits inside the embedding model's 256-token window with room to spare</div></div>
+                <div class="metric" style="border-left-color:var(--red);"><div class="val" style="color:var(--red);">120</div><div class="label">Overlap (13%) — if a sentence spans a boundary, at least one chunk will contain the full sentence</div></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Limitation: Blind Splitting</h3>
+            <p>Character-based chunking has no awareness of sentences, paragraphs, or sections. A chunk might start or end in the middle of a word:</p>
+            <pre><code class="language-text">... positive impact on the company's reve|nue growth in Q3.
+                                            ^--- chunk boundary
+
+Chunk 1 ends with: "...company's reve"
+Chunk 2 starts with: "venue growth in Q3..."</code></pre>
+            <p style="margin-top:0.75rem;">P2 solves this with <strong>semantic chunking</strong> that splits at sentence boundaries based on embedding similarity.</p>
+        </div>
+    </section>
+
+    <!-- ============ STEP 3: EMBEDDING ============ -->
+    <section id="embedding">
+        <h2><span class="step-num">3</span> Embedding</h2>
+        <p>Each chunk is converted into a 384-dimensional vector that captures its semantic meaning. Similar texts produce nearby vectors in this high-dimensional space.</p>
+
+        <div class="card">
+            <h3>The Transformer Pipeline</h3>
+            <pre><code class="language-text">"Retrieval augmented generation improves LLM accuracy"
+              |
+              v
+   ┌─────────────────────┐
+   │  Tokenize            │   Split into subwords: ["retrieval", "augmented", ...]
+   ├─────────────────────┤
+   │  6 Transformer       │   Each token builds contextual representation
+   │  Layers              │   by attending to all other tokens
+   ├─────────────────────┤
+   │  Mean Pooling        │   Average all token vectors into one vector
+   ├─────────────────────┤
+   │  L2 Normalize        │   Scale to unit length (||v|| = 1.0)
+   └─────────────────────┘
+              |
+              v
+   [0.032, -0.118, 0.245, ..., 0.087]    384 floating-point numbers</code></pre>
+        </div>
+
+        <div class="card">
+            <h3>Why Normalize?</h3>
+            <p>When all vectors have length 1.0, the <strong>dot product</strong> between two vectors equals their <strong>cosine similarity</strong>. This means:</p>
+            <ul style="margin: 0.75rem 0 0 1.5rem;">
+                <li><strong>1.0</strong> = identical meaning</li>
+                <li><strong>0.0</strong> = completely unrelated</li>
+                <li><strong>-1.0</strong> = opposite meaning</li>
+            </ul>
+            <pre><code class="language-python"># In rag.py — normalization is key
+embeddings = embedder.encode(
+    documents,
+    show_progress_bar=True,
+    normalize_embeddings=True    # This line!
+).tolist()</code></pre>
+        </div>
+
+        <div class="card embed-container">
+            <h3>2D Vector Space Visualization</h3>
+            <p>Below is a simulated 2D projection of how chunks cluster by meaning. Hover over points to see the text. Click "Add Query" to see how a query finds its nearest chunks.</p>
+            <div class="btn-group">
+                <button class="btn" onclick="resetVectorVis()">Reset</button>
+                <button class="btn btn-outline" onclick="addQueryPoint()">Add Query</button>
+            </div>
+            <svg id="vectorCanvas"></svg>
+            <div class="d3-tooltip" id="vecTooltip"></div>
+        </div>
+
+        <div class="card">
+            <h3>Model: all-MiniLM-L6-v2</h3>
+            <div class="metric-grid">
+                <div class="metric"><div class="val">384</div><div class="label">Output dimensions</div></div>
+                <div class="metric"><div class="val">6</div><div class="label">Transformer layers</div></div>
+                <div class="metric"><div class="val">22M</div><div class="label">Parameters</div></div>
+                <div class="metric"><div class="val">256</div><div class="label">Max input tokens</div></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ STEP 4: STORAGE ============ -->
+    <section id="storage">
+        <h2><span class="step-num">4</span> Vector Storage (ChromaDB)</h2>
+        <p>ChromaDB stores four things per chunk: ID, original text, metadata, and the embedding vector. It uses an HNSW index for fast approximate nearest neighbor search.</p>
+
+        <div class="card">
+            <h3>What Gets Stored</h3>
+            <div style="overflow-x:auto;">
+                <table class="db-table">
+                    <thead>
+                        <tr><th>ID</th><th>Document (text)</th><th>Metadata</th><th>Embedding (384-dim)</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mono">resume.pdf::chunk_0</td>
+                            <td>"Experienced AI engineer with 5+ years..."</td>
+                            <td><code>{"source": "resume.pdf", "chunk": 0}</code></td>
+                            <td class="mono">[0.032, -0.118, ..., 0.087]</td>
+                        </tr>
+                        <tr>
+                            <td class="mono">resume.pdf::chunk_1</td>
+                            <td>"...specializing in NLP, computer vision..."</td>
+                            <td><code>{"source": "resume.pdf", "chunk": 1}</code></td>
+                            <td class="mono">[0.156, -0.034, ..., 0.221]</td>
+                        </tr>
+                        <tr>
+                            <td class="mono">notes.txt::chunk_0</td>
+                            <td>"RAG combines retrieval with generation..."</td>
+                            <td><code>{"source": "notes.txt", "chunk": 0}</code></td>
+                            <td class="mono">[-0.089, 0.312, ..., 0.045]</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>The Code</h3>
+            <pre><code class="language-python"># Initialize persistent storage
+client = chromadb.PersistentClient(
+    path="./chroma_db",
+    settings=Settings(anonymized_telemetry=False)
+)
+col = client.get_or_create_collection(name="docs")
+
+# Store everything in one batch call
+col.add(
+    ids=ids,             # ["resume.pdf::chunk_0", ...]
+    documents=documents, # [chunk_text_0, chunk_text_1, ...]
+    metadatas=metadatas, # [{"source": "resume.pdf", "chunk": 0}, ...]
+    embeddings=embeddings # [[0.032, -0.118, ...], ...]
+)</code></pre>
+        </div>
+
+        <div class="card">
+            <h3>HNSW Index — How Search Works</h3>
+            <p>ChromaDB uses <strong>HNSW (Hierarchical Navigable Small World)</strong> — a graph-based algorithm for fast approximate nearest neighbor search.</p>
+            <div id="hnswCanvas" style="width:100%;height:300px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);margin:1rem 0;"></div>
+            <div class="btn-group">
+                <button class="btn" onclick="animateHNSW()">Animate Search</button>
+                <button class="btn btn-outline" onclick="resetHNSW()">Reset</button>
+            </div>
+            <div class="card-grid" style="margin-top:1rem;">
+                <div class="metric"><div class="val">O(log n)</div><div class="label">Search time — much faster than comparing every vector O(n)</div></div>
+                <div class="metric" style="border-left-color:var(--green);"><div class="val" style="color:var(--green);">SQLite</div><div class="label">Text + metadata stored in chroma.sqlite3 on disk</div></div>
+                <div class="metric" style="border-left-color:var(--orange);"><div class="val" style="color:var(--orange);">Persistent</div><div class="label">Data survives between runs — index once, query many times</div></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>At Query Time (Reverse)</h3>
+            <pre><code class="language-python"># Same embedding model encodes the question
+q_emb = embedder.encode(
+    ["What is the candidate's experience?"],
+    normalize_embeddings=True
+).tolist()[0]
+
+# HNSW graph finds nearest vectors in O(log n)
+results = col.query(
+    query_embeddings=[q_emb],
+    n_results=4,           # top-4 nearest chunks
+    include=["documents", "metadatas", "distances"]
+)
+# distances: lower = more relevant</code></pre>
+        </div>
+    </section>
+</div>
+
+<script>
+// ===================== NAV HIGHLIGHT =====================
+const navLinks = document.querySelectorAll('nav a');
+const sections = document.querySelectorAll('section');
+window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+        if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+});
+function scrollToSection(id) {
+    document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+}
+
+// ===================== HIGHLIGHT.JS INIT =====================
+hljs.highlightAll();
+
+// ===================== CHUNKING INTERACTIVE =====================
+function updateChunkVis() {
+    const docLen = +document.getElementById('docLen').value;
+    const chunkSize = +document.getElementById('chunkSize').value;
+    const overlap = +document.getElementById('overlapSize').value;
+    document.getElementById('docLenVal').textContent = docLen;
+    document.getElementById('chunkSizeVal').textContent = chunkSize;
+    document.getElementById('overlapVal').textContent = overlap;
+
+    const colors = ['c0','c1','c2','c3'];
+    const chunks = [];
+    let start = 0;
+    while (start < docLen) {
+        let end = Math.min(docLen, start + chunkSize);
+        chunks.push({ start, end });
+        start = end - overlap;
+        if (start < 0) start = 0;
+        if (end === docLen) break;
+    }
+
+    const container = document.getElementById('chunkVisual');
+    container.innerHTML = '';
+
+    // Document bar
+    const docRow = document.createElement('div');
+    docRow.className = 'chunk-bar-row';
+    docRow.innerHTML = `<div class="chunk-bar-label">Document</div>
+        <div class="chunk-bar-track" style="background:var(--surface);">
+            <div style="position:absolute;top:4px;left:0;height:28px;width:100%;background:var(--surface2);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:var(--text-dim);font-weight:600;">${docLen} characters</div>
+        </div>`;
+    container.appendChild(docRow);
+
+    chunks.forEach((c, i) => {
+        const row = document.createElement('div');
+        row.className = 'chunk-bar-row';
+        const leftPct = (c.start / docLen * 100).toFixed(2);
+        const widthPct = ((c.end - c.start) / docLen * 100).toFixed(2);
+
+        let overlapHTML = '';
+        if (i > 0) {
+            const oStart = c.start;
+            const oEnd = chunks[i-1].end;
+            if (oEnd > oStart) {
+                const oLeftPct = ((oStart - c.start) / (c.end - c.start) * 100).toFixed(2);
+                const oWidthPct = ((oEnd - oStart) / (c.end - c.start) * 100).toFixed(2);
+                overlapHTML = `<div class="overlap-marker" style="left:${oLeftPct}%;width:${oWidthPct}%;"></div>`;
+            }
+        }
+        row.innerHTML = `<div class="chunk-bar-label">Chunk ${i}</div>
+            <div class="chunk-bar-track">
+                <div class="chunk-bar ${colors[i % colors.length]}" style="left:${leftPct}%;width:${widthPct}%;">${c.start}-${c.end} ${overlapHTML}</div>
+            </div>`;
+        container.appendChild(row);
+    });
+
+    document.getElementById('chunkStats').textContent =
+        `${chunks.length} chunks created | avg ${Math.round((chunks.reduce((s,c)=>s+c.end-c.start,0))/chunks.length)} chars/chunk | overlap regions: ${Math.max(0, chunks.length - 1)}`;
+}
+updateChunkVis();
+
+// ===================== D3 VECTOR SPACE =====================
+const vecW = document.getElementById('vectorCanvas').clientWidth || 800;
+const vecH = 400;
+const svg = d3.select('#vectorCanvas').attr('width', vecW).attr('height', vecH);
+const tooltip = d3.select('#vecTooltip');
+
+const sampleChunks = [
+    { text: 'Machine learning is a subset of AI', x: 0.2, y: 0.3, cluster: 'ML' },
+    { text: 'Deep learning uses neural networks', x: 0.25, y: 0.25, cluster: 'ML' },
+    { text: 'Supervised learning needs labeled data', x: 0.18, y: 0.38, cluster: 'ML' },
+    { text: 'RAG combines retrieval with generation', x: 0.7, y: 0.3, cluster: 'RAG' },
+    { text: 'Vector databases store embeddings', x: 0.75, y: 0.35, cluster: 'RAG' },
+    { text: 'ChromaDB is an open-source vector DB', x: 0.72, y: 0.4, cluster: 'RAG' },
+    { text: 'Python is a popular programming language', x: 0.5, y: 0.7, cluster: 'Code' },
+    { text: 'FastAPI is a modern Python web framework', x: 0.55, y: 0.75, cluster: 'Code' },
+    { text: 'Docker containers package applications', x: 0.45, y: 0.65, cluster: 'Code' },
+];
+const clusterColors = { ML: '#58a6ff', RAG: '#3fb950', Code: '#d29922' };
+let queryPoint = null;
+
+function drawVectorVis() {
+    svg.selectAll('*').remove();
+    // Grid
+    const xScale = d3.scaleLinear().domain([0, 1]).range([50, vecW - 50]);
+    const yScale = d3.scaleLinear().domain([0, 1]).range([50, vecH - 50]);
+    // Axes labels
+    svg.append('text').attr('x', vecW / 2).attr('y', vecH - 8).attr('text-anchor', 'middle').attr('fill', '#8b949e').attr('font-size', 11).text('Dimension 1 (projected)');
+    svg.append('text').attr('x', 14).attr('y', vecH / 2).attr('text-anchor', 'middle').attr('fill', '#8b949e').attr('font-size', 11).attr('transform', `rotate(-90, 14, ${vecH/2})`).text('Dimension 2');
+
+    // Cluster ellipses
+    const clusters = ['ML', 'RAG', 'Code'];
+    clusters.forEach(cl => {
+        const pts = sampleChunks.filter(d => d.cluster === cl);
+        const cx = d3.mean(pts, d => xScale(d.x));
+        const cy = d3.mean(pts, d => yScale(d.y));
+        svg.append('ellipse').attr('cx', cx).attr('cy', cy).attr('rx', 80).attr('ry', 60)
+            .attr('fill', clusterColors[cl]).attr('opacity', 0.06).attr('stroke', clusterColors[cl]).attr('stroke-opacity', 0.15);
+        svg.append('text').attr('x', cx).attr('y', cy - 55).attr('text-anchor', 'middle')
+            .attr('fill', clusterColors[cl]).attr('font-size', 12).attr('font-weight', 700).text(cl);
+    });
+
+    // Points
+    const jitter = () => (Math.random() - 0.5) * 20;
+    svg.selectAll('.chunk-dot').data(sampleChunks).enter()
+        .append('circle').attr('class', 'chunk-dot')
+        .attr('cx', d => xScale(d.x) + jitter()).attr('cy', d => yScale(d.y) + jitter())
+        .attr('r', 7).attr('fill', d => clusterColors[d.cluster]).attr('opacity', 0.85)
+        .attr('stroke', '#fff').attr('stroke-width', 1.5)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(event, d) {
+            d3.select(this).attr('r', 11).attr('opacity', 1);
+            tooltip.style('opacity', 1)
+                .html(`<strong style="color:${clusterColors[d.cluster]}">${d.cluster}</strong><br>${d.text}`)
+                .style('left', (event.offsetX + 15) + 'px').style('top', (event.offsetY - 10) + 'px');
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 7).attr('opacity', 0.85);
+            tooltip.style('opacity', 0);
+        });
+
+    // Query point + lines
+    if (queryPoint) {
+        const qx = xScale(queryPoint.x), qy = yScale(queryPoint.y);
+        // Lines to nearest
+        const dists = sampleChunks.map((c, i) => ({ i, d: Math.hypot(xScale(c.x) - qx, yScale(c.y) - qy) }));
+        dists.sort((a, b) => a.d - b.d);
+        dists.slice(0, 4).forEach((item, rank) => {
+            const c = sampleChunks[item.i];
+            svg.append('line')
+                .attr('x1', qx).attr('y1', qy)
+                .attr('x2', xScale(c.x)).attr('y2', yScale(c.y))
+                .attr('stroke', '#f85149').attr('stroke-width', rank === 0 ? 2.5 : 1.5)
+                .attr('stroke-dasharray', rank === 0 ? 'none' : '5,5').attr('opacity', 0.7);
+        });
+        // Query diamond
+        svg.append('rect').attr('x', qx - 8).attr('y', qy - 8).attr('width', 16).attr('height', 16)
+            .attr('fill', '#f85149').attr('stroke', '#fff').attr('stroke-width', 2)
+            .attr('transform', `rotate(45, ${qx}, ${qy})`);
+        svg.append('text').attr('x', qx + 14).attr('y', qy + 5).attr('fill', '#f85149').attr('font-size', 12).attr('font-weight', 700).text('Query');
+    }
+}
+function resetVectorVis() { queryPoint = null; drawVectorVis(); }
+function addQueryPoint() {
+    queryPoint = { x: 0.22, y: 0.32 };
+    drawVectorVis();
+}
+drawVectorVis();
+
+// ===================== HNSW ANIMATION =====================
+const hnswSvg = d3.select('#hnswCanvas').append('svg').attr('width', '100%').attr('height', 300);
+const hnswW = document.getElementById('hnswCanvas').clientWidth || 800;
+const hnswNodes = [];
+const hnswEdges = [];
+// Generate random graph
+const rng = d3.randomUniform(40, hnswW - 40);
+const rngY = d3.randomUniform(30, 270);
+for (let i = 0; i < 24; i++) hnswNodes.push({ id: i, x: rng(), y: rngY(), visited: false, nearest: false });
+// Connect each node to 3-4 nearest
+hnswNodes.forEach((n, i) => {
+    const dists = hnswNodes.map((m, j) => ({ j, d: Math.hypot(n.x - m.x, n.y - m.y) })).filter(d => d.j !== i);
+    dists.sort((a, b) => a.d - b.d);
+    dists.slice(0, 3 + Math.floor(Math.random() * 2)).forEach(d => {
+        if (!hnswEdges.find(e => (e.s === i && e.t === d.j) || (e.s === d.j && e.t === i)))
+            hnswEdges.push({ s: i, t: d.j, active: false });
+    });
+});
+
+function drawHNSW() {
+    hnswSvg.selectAll('*').remove();
+    hnswSvg.attr('viewBox', `0 0 ${hnswW} 300`);
+    hnswEdges.forEach(e => {
+        const s = hnswNodes[e.s], t = hnswNodes[e.t];
+        hnswSvg.append('line').attr('x1', s.x).attr('y1', s.y).attr('x2', t.x).attr('y2', t.y)
+            .attr('stroke', e.active ? '#f85149' : '#30363d').attr('stroke-width', e.active ? 2.5 : 1).attr('opacity', e.active ? 1 : 0.5);
+    });
+    hnswNodes.forEach(n => {
+        hnswSvg.append('circle').attr('cx', n.x).attr('cy', n.y)
+            .attr('r', n.nearest ? 10 : n.visited ? 8 : 6)
+            .attr('fill', n.nearest ? '#3fb950' : n.visited ? '#f85149' : '#58a6ff')
+            .attr('stroke', '#fff').attr('stroke-width', n.nearest ? 2.5 : 1.5).attr('opacity', n.nearest ? 1 : n.visited ? 0.9 : 0.6);
+    });
+}
+drawHNSW();
+
+function resetHNSW() {
+    hnswNodes.forEach(n => { n.visited = false; n.nearest = false; });
+    hnswEdges.forEach(e => e.active = false);
+    drawHNSW();
+}
+
+function animateHNSW() {
+    resetHNSW();
+    // Pick entry point and target
+    const entry = 0;
+    const target = hnswNodes.length - 1;
+    // BFS-like animation to simulate graph traversal
+    const visited = new Set();
+    const queue = [entry];
+    let step = 0;
+    function tick() {
+        if (queue.length === 0 || step > 15) {
+            // Mark 3 nearest to target as results
+            const dists = hnswNodes.map((n, i) => ({ i, d: Math.hypot(n.x - hnswNodes[target].x, n.y - hnswNodes[target].y) }));
+            dists.sort((a, b) => a.d - b.d);
+            dists.slice(0, 4).forEach(d => hnswNodes[d.i].nearest = true);
+            drawHNSW();
+            return;
+        }
+        const curr = queue.shift();
+        if (visited.has(curr)) { tick(); return; }
+        visited.add(curr);
+        hnswNodes[curr].visited = true;
+        // Find connected neighbors
+        const neighbors = hnswEdges
+            .filter(e => e.s === curr || e.t === curr)
+            .map(e => { e.active = true; return e.s === curr ? e.t : e.s; })
+            .filter(n => !visited.has(n));
+        // Sort by distance to target, take closest 2
+        neighbors.sort((a, b) => {
+            const da = Math.hypot(hnswNodes[a].x - hnswNodes[target].x, hnswNodes[a].y - hnswNodes[target].y);
+            const db = Math.hypot(hnswNodes[b].x - hnswNodes[target].x, hnswNodes[b].y - hnswNodes[target].y);
+            return da - db;
+        });
+        neighbors.slice(0, 2).forEach(n => queue.push(n));
+        step++;
+        drawHNSW();
+        setTimeout(tick, 400);
+    }
+    tick();
+}
+</script>
+</body>
+</html>

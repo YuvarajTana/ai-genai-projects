@@ -58,16 +58,16 @@ python rag.py --index --chat
 
 All configuration is via constants at the top of `rag.py`:
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `DATA_DIR` | `./data` | Documents directory |
-| `DB_DIR` | `./chroma_db` | ChromaDB storage |
-| `EMBED_MODEL_NAME` | `all-MiniLM-L6-v2` | Embedding model |
-| `OLLAMA_URL` | `localhost:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `gpt-oss:20b` | LLM model name |
-| `chunk_size` | 900 | Characters per chunk |
-| `overlap` | 120 | Overlap between chunks |
-| `k` | 4 | Number of results to retrieve |
+| Parameter          | Default            | Description                   |
+|--------------------|--------------------|------------------------------ |
+| `DATA_DIR`         | `./data`           | Documents directory           |
+| `DB_DIR`           | `./chroma_db`      | ChromaDB storage              |
+| `EMBED_MODEL_NAME` | `all-MiniLM-L6-v2` | Embedding model               |
+| `OLLAMA_URL`       | `localhost:11434`  | Ollama API endpoint           |
+| `OLLAMA_MODEL`     | `gpt-oss:20b`      | LLM model name                |
+| `chunk_size`       | 900                | Characters per chunk          |
+| `overlap`          | 120                | Overlap between chunks        |
+| `k`                | 4                  | Number of results to retrieve |
 
 ## Project Structure
 
